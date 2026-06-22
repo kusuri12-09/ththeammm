@@ -11,10 +11,11 @@ SRC_DIR = Path(__file__).resolve().parents[1]
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from utils import STEAMSPY_CSV, STORE_CSV, fetch_json_with_retry, write_csv
+from utils import DATA_DIR, STEAMSPY_CSV, fetch_json_with_retry, write_csv
 
 
 STORE_APPDETAILS_URL = "https://store.steampowered.com/api/appdetails"
+STORE_COLUMNS = ["appid", "name", "is_free", "price", "genres", "release_date"]
 
 
 def normalize_price(data: dict[str, object]) -> float | None:
@@ -68,11 +69,14 @@ def parse_store_response(appid: int, payload: dict[str, object]) -> dict[str, ob
     }
 
 
-def collect_store(input_csv: Path = STEAMSPY_CSV, delay: float = 0.35) -> list[dict[str, object]]:
-    steamspy = pd.read_csv(input_csv)
+def chunk_output_path(output_dir: Path, chunk_number: int) -> Path:
+    return output_dir / f"steam_store_games_{chunk_number:03d}.csv"
+
+
+def collect_store_chunk(appids: pd.Series, delay: float = 0.35) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
 
-    for index, appid in enumerate(steamspy["appid"].dropna().astype(int), start=1):
+    for index, appid in enumerate(appids.dropna().astype(int), start=1):
         payload = fetch_json_with_retry(
             STORE_APPDETAILS_URL,
             params={"appids": appid, "cc": "KR", "l": "korean"},
@@ -84,26 +88,58 @@ def collect_store(input_csv: Path = STEAMSPY_CSV, delay: float = 0.35) -> list[d
             rows.append(row)
 
         if index % 50 == 0:
-            print(f"Fetched {index} app details, kept {len(rows)} games.")
+            print(f"Fetched {index} app details in current chunk, kept {len(rows)} games.")
         time.sleep(delay)
 
     return rows
 
 
+def collect_store(
+    input_csv: Path = STEAMSPY_CSV,
+    output_dir: Path = DATA_DIR,
+    chunk_size: int = 200,
+    delay: float = 0.35,
+    overwrite: bool = False,
+) -> list[Path]:
+    steamspy = pd.read_csv(input_csv)
+    appids = steamspy["appid"].dropna().astype(int)
+    output_paths: list[Path] = []
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for chunk_index, start in enumerate(range(0, len(appids), chunk_size), start=1):
+        output_path = chunk_output_path(output_dir, chunk_index)
+        output_paths.append(output_path)
+
+        if output_path.exists() and not overwrite:
+            print(f"Skipped chunk {chunk_index}: {output_path} already exists.")
+            continue
+
+        chunk_appids = appids.iloc[start : start + chunk_size]
+        print(f"Collecting chunk {chunk_index}: source rows {start + 1}-{start + len(chunk_appids)}")
+        rows = collect_store_chunk(chunk_appids, delay=delay)
+        write_csv(output_path, rows, STORE_COLUMNS)
+        print(f"Saved {len(rows)} Store rows to {output_path}")
+
+    return output_paths
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Collect Steam Store app details.")
     parser.add_argument("--input", default=str(STEAMSPY_CSV), help="SteamSpy CSV path.")
-    parser.add_argument("--output", default=str(STORE_CSV), help="Output CSV path.")
+    parser.add_argument("--output-dir", default=str(DATA_DIR), help="Output directory for chunk CSV files.")
+    parser.add_argument("--chunk-size", type=int, default=200, help="Number of source appids per output CSV.")
     parser.add_argument("--delay", type=float, default=0.35, help="Delay between requests in seconds.")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing chunk CSV files.")
     args = parser.parse_args()
 
-    rows = collect_store(input_csv=Path(args.input), delay=args.delay)
-    write_csv(
-        Path(args.output),
-        rows,
-        ["appid", "name", "is_free", "price", "genres", "release_date"],
+    paths = collect_store(
+        input_csv=Path(args.input),
+        output_dir=Path(args.output_dir),
+        chunk_size=args.chunk_size,
+        delay=args.delay,
+        overwrite=args.overwrite,
     )
-    print(f"Saved {len(rows)} Store rows to {args.output}")
+    print(f"Store chunk files: {len(paths)}")
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ python src/analysis.py
 ## 생성 파일
 
 - `data/steamspy_games.csv`
-- `data/steam_store_games.csv`
+- `data/steam_store_games_001.csv` ~ `data/steam_store_games_005.csv`
 - `data/merged_games.csv`
 - `outputs/chart_free_vs_paid.png`
 - `outputs/chart_price_vs_rating.png`

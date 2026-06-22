@@ -36,7 +36,7 @@ GET https://store.steampowered.com/api/appdetails?appids={appid}&cc=KR&l=korean
 저장 파일
 
 ```text
-steam_store_games.csv
+steam_store_games_001.csv ~ steam_store_games_005.csv
 ```
 
 ---
@@ -228,7 +228,9 @@ value_score = (
 project/
 │
 ├── data/
-│   ├── steam_store_games.csv
+│   ├── steam_store_games_001.csv
+│   ├── steam_store_games_002.csv
+│   ├── ...
 │   ├── steamspy_games.csv
 │   └── merged_games.csv
 │

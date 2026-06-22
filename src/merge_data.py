@@ -7,13 +7,25 @@ import pandas as pd
 
 from utils import MERGED_CSV, STEAMSPY_CSV, STORE_CSV, ensure_dirs
 
+
+def load_store_dataset(store_csv: Path) -> pd.DataFrame:
+    chunk_paths = sorted(store_csv.parent.glob(f"{store_csv.stem}_*.csv"))
+    if chunk_paths:
+        return pd.concat((pd.read_csv(path) for path in chunk_paths), ignore_index=True)
+
+    if store_csv.exists():
+        return pd.read_csv(store_csv)
+
+    raise FileNotFoundError(f"No Store CSV found: {store_csv} or {store_csv.stem}_*.csv")
+
+
 def merge_data(
     store_csv: Path = STORE_CSV,
     steamspy_csv: Path = STEAMSPY_CSV,
     output_csv: Path = MERGED_CSV,
 ) -> pd.DataFrame:
     ensure_dirs()
-    store_df = pd.read_csv(store_csv)
+    store_df = load_store_dataset(store_csv)
     steamspy_df = pd.read_csv(steamspy_csv)
 
     merged = store_df.merge(steamspy_df, on="appid", how="inner", suffixes=("_store", "_steamspy"))

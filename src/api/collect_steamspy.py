@@ -14,7 +14,7 @@ from utils import STEAMSPY_CSV, fetch_json_with_retry, parse_owners_range, write
 STEAMSPY_ALL_URL = "https://steamspy.com/api.php"
 
 
-def collect_steamspy(limit: int = 2000) -> list[dict[str, object]]:
+def collect_steamspy(limit: int = 1000) -> list[dict[str, object]]:
     payload = fetch_json_with_retry(STEAMSPY_ALL_URL, params={"request": "all"})
     games = list(payload.values())
 
