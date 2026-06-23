@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from utils import MERGED_CSV, OUTPUT_DIR, REPORT_MD, ensure_dirs, resolve_data_file, split_genres
+from utils import MERGED_CSV, OUTPUT_DIR, ensure_dirs, resolve_data_file, split_genres
 
 MPL_CONFIG_DIR = OUTPUT_DIR / ".matplotlib"
 MPL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -21,20 +21,7 @@ plt.rcParams["font.family"] = ["Malgun Gothic", "DejaVu Sans", "Arial"]
 plt.rcParams["axes.unicode_minus"] = False
 
 
-def markdown_table(df: pd.DataFrame, columns: list[str] | None = None) -> str:
-    table = df.reset_index() if df.index.name else df.copy()
-    if columns is not None:
-        table = table[columns]
-
-    header = "| " + " | ".join(str(column) for column in table.columns) + " |"
-    divider = "| " + " | ".join("---" for _ in table.columns) + " |"
-    rows = [
-        "| " + " | ".join("" if pd.isna(value) else str(value) for value in row) + " |"
-        for row in table.itertuples(index=False, name=None)
-    ]
-    return "\n".join([header, divider, *rows])
-
-
+# 병합된 CSV를 읽고 분석에 필요한 컬럼 타입을 정리한다.
 def load_dataset(path: Path = MERGED_CSV) -> pd.DataFrame:
     path = resolve_data_file(path)
     df = pd.read_csv(path)
@@ -43,7 +30,8 @@ def load_dataset(path: Path = MERGED_CSV) -> pd.DataFrame:
     df["is_free"] = df["is_free"].astype(str).str.lower().isin(["true", "1", "yes"])
     return df.dropna(subset=["price", "owners_avg", "positive_rate", "genres"])
 
-
+# topic 1. 무료 게임은 정말 더 인기 있을까?
+# 무료/유료 게임의 평균 소유자 수와 긍정률을 비교하는 막대 그래프 생성
 def make_free_vs_paid_chart(df: pd.DataFrame) -> Path:
     summary = (
         df.assign(type=df["is_free"].map({True: "Free", False: "Paid"}))
@@ -67,7 +55,8 @@ def make_free_vs_paid_chart(df: pd.DataFrame) -> Path:
     plt.close(fig)
     return output
 
-
+# topic 2. 게임 가격과 유저 평가는 어떤 관계가 있을까?
+# 유료 게임만 대상으로 가격과 긍정률의 관계를 산점도와 회귀선으로 표시한다.
 def make_price_vs_rating_chart(df: pd.DataFrame) -> Path:
     paid = df[(df["price"] > 0) & df["positive_rate"].notna()].copy()
     output = OUTPUT_DIR / "chart_price_vs_rating.png"
@@ -89,7 +78,7 @@ def make_price_vs_rating_chart(df: pd.DataFrame) -> Path:
     plt.close(fig)
     return output
 
-
+# 여러 장르가 들어 있는 한 게임을 장르별 행으로 펼친다.
 def genre_frame(df: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     for _, row in df.iterrows():
@@ -106,11 +95,13 @@ def genre_frame(df: pd.DataFrame) -> pd.DataFrame:
             )
     return pd.DataFrame(rows)
 
-
+# topic 3. 어떤 장르가 가장 가성비가 좋을까?
+# 장르별 가성비 점수를 집계하고 상위 장르 막대 그래프와 히트맵을 만든다.
 def make_genre_value_chart(df: pd.DataFrame) -> tuple[Path, pd.DataFrame]:
     genres = genre_frame(df)
     paid_genres = genres.dropna(subset=["value_score"])
 
+    # 평균은 극단값 영향을 받기 쉬워 순위는 중앙값 기준으로 정한다.
     summary = (
         paid_genres.groupby("genre", as_index=False)
         .agg(
@@ -136,6 +127,7 @@ def make_genre_value_chart(df: pd.DataFrame) -> tuple[Path, pd.DataFrame]:
     fig.savefig(output, dpi=160)
     plt.close(fig)
 
+    # 서로 단위가 다른 지표를 같은 색상 범위에서 비교할 수 있도록 표준화한다.
     heatmap_data = summary.set_index("genre")[
         ["mean_price", "mean_positive_rate", "mean_playtime", "median_value_score"]
     ]
@@ -151,63 +143,17 @@ def make_genre_value_chart(df: pd.DataFrame) -> tuple[Path, pd.DataFrame]:
     return output, summary
 
 
-def write_report(df: pd.DataFrame, genre_summary: pd.DataFrame) -> None:
-    free_paid = (
-        df.assign(type=df["is_free"].map({True: "무료", False: "유료"}))
-        .groupby("type")
-        .agg(
-            game_count=("appid", "size"),
-            mean_owners=("owners_avg", "mean"),
-            mean_positive_rate=("positive_rate", "mean"),
-        )
-        .round(2)
-    )
-    price_corr = df.loc[df["price"] > 0, ["price", "positive_rate"]].corr().iloc[0, 1]
-
-    top_genres = markdown_table(genre_summary[["genre", "game_count", "median_value_score"]].round(2))
-
-    REPORT_MD.write_text(
-        "\n".join(
-            [
-                "# Steam 게임 가격과 인기도 상관관계 분석",
-                "",
-                "## 데이터 개요",
-                f"- 분석 게임 수: {len(df):,}개",
-                f"- 무료 게임 수: {int(df['is_free'].sum()):,}개",
-                f"- 유료 게임 수: {int((~df['is_free']).sum()):,}개",
-                "",
-                "## 무료/유료 비교",
-                markdown_table(free_paid),
-                "",
-                "## 가격과 긍정률",
-                f"- 유료 게임 가격과 긍정률의 상관계수: {price_corr:.4f}",
-                "",
-                "## 장르별 가성비 상위",
-                top_genres,
-                "",
-                "## 생성된 시각화",
-                "- outputs/chart_free_vs_paid.png",
-                "- outputs/chart_price_vs_rating.png",
-                "- outputs/chart_genre_value.png",
-                "- outputs/chart_genre_heatmap.png",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-
+# 전체 분석 흐름을 실행하고 생성된 차트 위치와 핵심 상관계수를 출력한다.
 def analyze(input_csv: Path = MERGED_CSV) -> None:
     ensure_dirs()
     df = load_dataset(input_csv)
     make_free_vs_paid_chart(df)
     make_price_vs_rating_chart(df)
-    _, genre_summary = make_genre_value_chart(df)
-    write_report(df, genre_summary)
+    make_genre_value_chart(df)
 
     price_corr = df.loc[df["price"] > 0, ["price", "positive_rate"]].corr().iloc[0, 1]
     print(f"Price/positive-rate correlation: {price_corr:.4f}")
     print(f"Charts saved to {OUTPUT_DIR}")
-    print(f"Report saved to {REPORT_MD}")
 
 
 def main() -> None:

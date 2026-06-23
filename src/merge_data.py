@@ -8,7 +8,7 @@ import pandas as pd
 
 from utils import MERGED_CSV, STEAMSPY_CSV, STORE_CSV, ensure_dirs, resolve_data_file
 
-
+# 데이터 가져오기
 def load_store_dataset(store_csv: Path) -> pd.DataFrame:
     store_csv = resolve_data_file(store_csv)
     chunk_paths = sorted(store_csv.parent.glob(f"{store_csv.stem}_*.csv"))
@@ -20,7 +20,7 @@ def load_store_dataset(store_csv: Path) -> pd.DataFrame:
 
     raise FileNotFoundError(f"No Store CSV found: {store_csv} or {store_csv.stem}_*.csv")
 
-
+# 데이터 셋 합치기
 def merge_data(
     store_csv: Path = STORE_CSV,
     steamspy_csv: Path = STEAMSPY_CSV,

@@ -26,4 +26,3 @@ python src/analysis.py
 - `outputs/chart_price_vs_rating.png`
 - `outputs/chart_genre_value.png`
 - `outputs/chart_genre_heatmap.png`
-- `report.md`

@@ -245,6 +245,4 @@ project/
 │   ├── chart_free_vs_paid.png
 │   ├── chart_price_vs_rating.png
 │   └── chart_genre_value.png
-│
-└── report.md
 ```

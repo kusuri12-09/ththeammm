@@ -15,7 +15,6 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs"
 STEAMSPY_CSV = DATA_DIR / "steamspy_games.csv"
 STORE_CSV = DATA_DIR / "steam_store_games.csv"
 MERGED_CSV = DATA_DIR / "merged_games.csv"
-REPORT_MD = PROJECT_ROOT / "report.md"
 
 
 def ensure_dirs() -> None:
