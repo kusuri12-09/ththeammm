@@ -3,12 +3,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
-from utils import MERGED_CSV, STEAMSPY_CSV, STORE_CSV, ensure_dirs
+from utils import MERGED_CSV, STEAMSPY_CSV, STORE_CSV, ensure_dirs, resolve_data_file
 
 
 def load_store_dataset(store_csv: Path) -> pd.DataFrame:
+    store_csv = resolve_data_file(store_csv)
     chunk_paths = sorted(store_csv.parent.glob(f"{store_csv.stem}_*.csv"))
     if chunk_paths:
         return pd.concat((pd.read_csv(path) for path in chunk_paths), ignore_index=True)
@@ -25,6 +27,9 @@ def merge_data(
     output_csv: Path = MERGED_CSV,
 ) -> pd.DataFrame:
     ensure_dirs()
+    steamspy_csv = resolve_data_file(steamspy_csv)
+    output_csv = resolve_data_file(output_csv)
+
     store_df = load_store_dataset(store_csv)
     steamspy_df = pd.read_csv(steamspy_csv)
 
@@ -42,9 +47,16 @@ def merge_data(
     merged["positive_rate"] = (merged["positive"] / merged["review_count"]) * 100
     merged["value_score"] = pd.NA
     paid_mask = merged["price"] > 0
-    merged.loc[paid_mask, "value_score"] = (
-        merged.loc[paid_mask, "positive_rate"] * merged.loc[paid_mask, "average_forever"]
-    ) / merged.loc[paid_mask, "price"]
+    playtime_mask = merged["average_forever"] > 0
+    if playtime_mask.any():
+        merged.loc[paid_mask & playtime_mask, "value_score"] = (
+            merged.loc[paid_mask & playtime_mask, "positive_rate"]
+            * merged.loc[paid_mask & playtime_mask, "average_forever"]
+        ) / merged.loc[paid_mask & playtime_mask, "price"]
+    else:
+        merged.loc[paid_mask, "value_score"] = (
+            merged.loc[paid_mask, "positive_rate"] * np.log1p(merged.loc[paid_mask, "review_count"])
+        ) / (merged.loc[paid_mask, "price"] / 10000)
 
     columns = [
         "appid",
@@ -78,7 +90,7 @@ def main() -> None:
     args = parser.parse_args()
 
     merged = merge_data(Path(args.store), Path(args.steamspy), Path(args.output))
-    print(f"Saved {len(merged)} merged rows to {args.output}")
+    print(f"Saved {len(merged)} merged rows to {resolve_data_file(args.output)}")
 
 
 if __name__ == "__main__":

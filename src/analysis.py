@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import pandas as pd
-import seaborn as sns
 
-from utils import MERGED_CSV, OUTPUT_DIR, REPORT_MD, ensure_dirs, split_genres
+from utils import MERGED_CSV, OUTPUT_DIR, REPORT_MD, ensure_dirs, resolve_data_file, split_genres
+
+MPL_CONFIG_DIR = OUTPUT_DIR / ".matplotlib"
+MPL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", str(MPL_CONFIG_DIR))
+
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 sns.set_theme(style="whitegrid")
+plt.rcParams["font.family"] = ["Malgun Gothic", "DejaVu Sans", "Arial"]
+plt.rcParams["axes.unicode_minus"] = False
 
 
 def markdown_table(df: pd.DataFrame, columns: list[str] | None = None) -> str:
@@ -28,6 +36,7 @@ def markdown_table(df: pd.DataFrame, columns: list[str] | None = None) -> str:
 
 
 def load_dataset(path: Path = MERGED_CSV) -> pd.DataFrame:
+    path = resolve_data_file(path)
     df = pd.read_csv(path)
     for column in ["price", "owners_avg", "positive_rate", "average_forever", "review_count", "value_score"]:
         df[column] = pd.to_numeric(df[column], errors="coerce")
@@ -110,24 +119,25 @@ def make_genre_value_chart(df: pd.DataFrame) -> tuple[Path, pd.DataFrame]:
             mean_positive_rate=("positive_rate", "mean"),
             mean_playtime=("average_forever", "mean"),
             mean_value_score=("value_score", "mean"),
+            median_value_score=("value_score", "median"),
         )
         .query("game_count >= 5")
-        .sort_values("mean_value_score", ascending=False)
+        .sort_values("median_value_score", ascending=False)
         .head(12)
     )
 
     output = OUTPUT_DIR / "chart_genre_value.png"
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.barplot(data=summary, y="genre", x="mean_value_score", ax=ax)
-    ax.set_title("Top Genres by Value Score")
-    ax.set_xlabel("Mean value score")
+    sns.barplot(data=summary, y="genre", x="median_value_score", ax=ax)
+    ax.set_title("Top Genres by Median Value Score")
+    ax.set_xlabel("Median value score")
     ax.set_ylabel("")
     fig.tight_layout()
     fig.savefig(output, dpi=160)
     plt.close(fig)
 
     heatmap_data = summary.set_index("genre")[
-        ["mean_price", "mean_positive_rate", "mean_playtime", "mean_value_score"]
+        ["mean_price", "mean_positive_rate", "mean_playtime", "median_value_score"]
     ]
     if not heatmap_data.empty:
         scaled = (heatmap_data - heatmap_data.mean()) / heatmap_data.std(ddof=0).replace(0, 1)
@@ -154,7 +164,7 @@ def write_report(df: pd.DataFrame, genre_summary: pd.DataFrame) -> None:
     )
     price_corr = df.loc[df["price"] > 0, ["price", "positive_rate"]].corr().iloc[0, 1]
 
-    top_genres = markdown_table(genre_summary[["genre", "game_count", "mean_value_score"]].round(2))
+    top_genres = markdown_table(genre_summary[["genre", "game_count", "median_value_score"]].round(2))
 
     REPORT_MD.write_text(
         "\n".join(

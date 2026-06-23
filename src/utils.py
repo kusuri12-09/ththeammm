@@ -23,6 +23,15 @@ def ensure_dirs() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
 
 
+def resolve_data_file(path: str | Path) -> Path:
+    input_path = Path(path)
+    if input_path.is_absolute():
+        return input_path
+    if input_path.parent == Path("."):
+        return DATA_DIR / input_path.name
+    return PROJECT_ROOT / input_path
+
+
 def fetch_json(url: str, params: dict[str, Any] | None = None, timeout: int = 30) -> Any:
     response = requests.get(
         url,
